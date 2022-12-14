@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sketchpad</title>
+    <link rel="stylesheet" href="index.css" />
+    <script defer type="text/javascript" src="app.js"></script>
+  </head>
+  <body>
+    <div
+      style="width: 100%; font-size: large; padding: 10; align-content: center"
+    >
+      <a
+        class="et_pb_button"
+        title="delete"
+        href="#"
+        onclick="setMode('create');"
+        >create</a
+      ><a
+        class="et_pb_button"
+        title="create"
+        href="#"
+        onclick="setMode('delete');"
+        >delete</a
+      ><a class="et_pb_button" title="other" href="#">refresh</a>
+    </div>
+    <canvas></canvas>
+  </body>
+</html>
