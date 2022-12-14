@@ -23,6 +23,11 @@ var mode = "create";
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight - 20;
+
+  hitCanvas.width = window.innerWidth;
+  hitCanvas.height = window.innerHeight - 20;
+  hitCanvas.style.position = "absolute";
+  hitCanvas.style.top = canvas.getBoundingClientRect().top + "px";
 }
 
 function setMode(newMode) {
@@ -37,11 +42,27 @@ function getMousePosition(e) {
   return { x: x, y: y };
 }
 
+function getHitMousePosition(e) {
+  let rect = hitCanvas.getBoundingClientRect();
+  let x = e.clientX - rect.left;
+  let y = e.clientY - rect.top;
+  return { x: x, y: y };
+}
+
 function getRandomColor() {
   const r = Math.round(Math.random() * 255);
   const g = Math.round(Math.random() * 255);
   const b = Math.round(Math.random() * 255);
   return `rgb(${r},${g},${b})`;
+}
+
+function getHitColor(edge) {
+  while (true) {
+    const colorKey = getRandomColor();
+    if (!colorHash[colorKey]) {
+      return colorKey;
+    }
+  }
 }
 
 function draw() {
@@ -72,6 +93,8 @@ function drawMidPoint(e) {
 }
 
 function drawEdges() {
+  context.lineWidth = 3;
+  hitContext.lineWidth = 5;
   for (let i = 0; i < edges.length; i++) {
     let fromNode = edges[i].from;
     let toNode = edges[i].to;
@@ -84,11 +107,23 @@ function drawEdges() {
       toNode.x,
       toNode.y
     );
-    //context.lineTo(toNode.x, toNode.y);
-    // test hit region
     context.stroke();
     drawMidPoint(edges[i]);
+
+    // Now draw on hitCtx
+    hitContext.beginPath();
+    hitContext.strokeStyle = edges[i].colorKey;
+    hitContext.moveTo(fromNode.x, fromNode.y);
+    hitContext.quadraticCurveTo(
+      edges[i].midpoint.x,
+      edges[i].midpoint.y,
+      toNode.x,
+      toNode.y
+    );
+    hitContext.stroke();
   }
+  context.lineWidth = 1;
+  hitContext.lineWidth = 1;
 }
 
 function drawVertex(v) {
@@ -134,8 +169,15 @@ function move(e) {
 
 function down(e) {
   let position = getMousePosition(e);
+
+  // return if click outside canvas
+  if (position.x < 0 || position.y < 0) {
+    return;
+  }
   let target = within(position.x, position.y);
+
   if (mode == "create") {
+    // toggle currently selected node to false
     if (selection && selection.selected) {
       selection.selected = false;
     }
@@ -144,10 +186,15 @@ function down(e) {
         // TODO extract to addEdge function
         midpoint = findMidPoint(selection, target);
         newEdge = {
+          id: edges.length === 0 ? 1 : edges[edges.length - 1].id + 1,
           from: selection,
           to: target,
           midpoint: { ...midpoint },
+          colorKey: getHitColor(),
         };
+        // Add hitColor to colorHash
+        colorHash[newEdge.colorKey] = newEdge;
+
         // Add to master edge list
         edges.push(newEdge);
 
@@ -165,6 +212,10 @@ function down(e) {
 
 function up(e) {
   let position = getMousePosition(e);
+
+  if (position.x < 0 || position.y < 0) {
+    return;
+  }
   if (mode == "create") {
     if (!selection) {
       let node = {
@@ -186,7 +237,7 @@ function up(e) {
     draw();
   } else {
     target = within(position.x, position.y);
-
+    // Check for clicked vertex, then clicked edge
     if (target) {
       // Find all connected edges
       let dyingEdges = [...target.edges];
@@ -199,13 +250,25 @@ function up(e) {
       deleteVertices(dyingVertices);
       deleteEdges(dyingEdges);
       draw();
+    } else {
+      //console.log(getHitMousePosition(e));
+      //console.log(getMousePosition(e));
+      //console.log(hitContext.getImageData(position.x, position.y, 1, 1).data);
+      const pixel = hitContext.getImageData(position.x, position.y, 1, 1).data;
+      const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+      const edge = colorHash[color];
+      console.log(colorHash);
+      console.log(edge);
+      if (edge) {
+        console.log("clicked edge");
+        deleteEdges([edge]);
+        draw();
+      }
     }
   }
 }
 
 function deleteEdges(dyingEdges) {
-  console.log("deleting edges: " + dyingEdges);
-
   for (let i = 0; i < dyingEdges.length; i++) {
     // First remove edges from vertex edge list
     let index = dyingEdges[i].from.edges.indexOf(dyingEdges[i]);
@@ -217,8 +280,12 @@ function deleteEdges(dyingEdges) {
       dyingEdges[i].to.edges.splice(index, 1);
     }
 
+    // Remove from hit system
+    delete colorHash[dyingEdges[i].colorKey];
+
     // Then remove edge from master edge list
     index = edges.indexOf(dyingEdges[i]);
+    console.log(index);
     if (index >= 0) {
       edges.splice(index, 1);
     }
