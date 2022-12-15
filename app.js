@@ -98,32 +98,96 @@ function drawEdges() {
   for (let i = 0; i < edges.length; i++) {
     let fromNode = edges[i].from;
     let toNode = edges[i].to;
-    context.beginPath();
-    context.strokeStyle = fromNode.strokeStyle;
-    context.moveTo(fromNode.x, fromNode.y);
-    context.quadraticCurveTo(
-      edges[i].midpoint.x,
-      edges[i].midpoint.y,
-      toNode.x,
-      toNode.y
-    );
-    context.stroke();
-    drawMidPoint(edges[i]);
 
-    // Now draw on hitCtx
-    hitContext.beginPath();
-    hitContext.strokeStyle = edges[i].colorKey;
-    hitContext.moveTo(fromNode.x, fromNode.y);
-    hitContext.quadraticCurveTo(
-      edges[i].midpoint.x,
-      edges[i].midpoint.y,
-      toNode.x,
-      toNode.y
-    );
-    hitContext.stroke();
+    // Check if isLoop
+    if (fromNode === toNode) {
+      drawLoop(edges[i]);
+    } else if (countParalell(fromNode, toNode) === 1) {
+      context.beginPath();
+      context.strokeStyle = fromNode.strokeStyle;
+      context.moveTo(fromNode.x, fromNode.y);
+      context.quadraticCurveTo(
+        edges[i].midpoint.x,
+        edges[i].midpoint.y,
+        toNode.x,
+        toNode.y
+      );
+      context.stroke();
+      drawMidPoint(edges[i]);
+
+      // Now draw on hitCtx
+      hitContext.beginPath();
+      hitContext.strokeStyle = edges[i].colorKey;
+      hitContext.moveTo(fromNode.x, fromNode.y);
+      hitContext.quadraticCurveTo(
+        edges[i].midpoint.x,
+        edges[i].midpoint.y,
+        toNode.x,
+        toNode.y
+      );
+      hitContext.stroke();
+    } else {
+      drawCurvedEdge(edges[i]);
+      drawMidPoint(edges[i]);
+    }
   }
   context.lineWidth = 1;
   hitContext.lineWidth = 1;
+}
+
+function drawLoop(edge) {
+  let node = edge.from;
+  context.beginPath();
+  context.strokeStyle = node.strokeStyle;
+  context.moveTo(node.x, node.y);
+  context.arc(node.x - 28, node.y, 20, 0, Math.PI * 2, true);
+  context.stroke();
+
+  // Now draw on hitCtx
+  hitContext.beginPath();
+  hitContext.strokeStyle = edge.colorKey;
+  hitContext.moveTo(node.x, node.y);
+  hitContext.arc(node.x - 28, node.y, 20, 0, Math.PI * 2, true);
+  hitContext.stroke();
+}
+
+function drawCurvedEdge(edge) {
+  let angle = Math.atan2(edge.to.y - edge.from.y, edge.to.x - edge.from.x);
+  let major =
+    Math.sqrt(
+      (edge.to.x - edge.from.x) * (edge.to.x - edge.from.x) +
+        (edge.to.y - edge.from.y) * (edge.to.y - edge.from.y)
+    ) / 2;
+  let minor = 0;
+
+  // if no paralell prop in edge, add it
+  if (!!!edge.paralell) {
+    edge.paralell = countParalell(edge.to, edge.from);
+  }
+
+  // even or odd determines side
+  let side = edge.paralell % 2;
+  minor = 8 * edge.paralell;
+
+  if (!!side) {
+    clockwise = false;
+  } else {
+    clockwise = true;
+  }
+
+  context.beginPath();
+  context.ellipse(
+    edge.midpoint.x,
+    edge.midpoint.y,
+    major,
+    minor,
+    angle,
+    0,
+    Math.PI,
+    clockwise
+  );
+  context.stroke();
+  //console.log(countParalell(edge.from, edge.to));
 }
 
 function drawVertex(v) {
@@ -140,6 +204,20 @@ function drawVertices() {
     let node = nodes[i];
     drawVertex(node);
   }
+}
+
+function countParalell(from, to) {
+  let count = 0;
+  for (let i = 0; i < edges.length; i++) {
+    if (
+      (edges[i].from === from && edges[i].to === to) ||
+      (edges[i].from === to && edges[i].to === from)
+    ) {
+      count++;
+    }
+  }
+  //console.log(count);
+  return count;
 }
 
 function within(x, y) {
@@ -182,7 +260,7 @@ function down(e) {
       selection.selected = false;
     }
     if (target) {
-      if (selection && selection !== target) {
+      if (selection) {
         // TODO extract to addEdge function
         midpoint = findMidPoint(selection, target);
         newEdge = {
@@ -251,16 +329,14 @@ function up(e) {
       deleteEdges(dyingEdges);
       draw();
     } else {
-      //console.log(getHitMousePosition(e));
-      //console.log(getMousePosition(e));
-      //console.log(hitContext.getImageData(position.x, position.y, 1, 1).data);
+      // Mode delete, check if clicked edge and delete it
       const pixel = hitContext.getImageData(position.x, position.y, 1, 1).data;
       const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
       const edge = colorHash[color];
-      console.log(colorHash);
-      console.log(edge);
+      //console.log(colorHash);
+      //console.log(edge);
       if (edge) {
-        console.log("clicked edge");
+        //console.log("clicked edge");
         deleteEdges([edge]);
         draw();
       }
@@ -285,7 +361,7 @@ function deleteEdges(dyingEdges) {
 
     // Then remove edge from master edge list
     index = edges.indexOf(dyingEdges[i]);
-    console.log(index);
+    //console.log(index);
     if (index >= 0) {
       edges.splice(index, 1);
     }
