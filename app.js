@@ -5,6 +5,10 @@ const context = canvas.getContext("2d");
 const hitCanvas = document.createElement("canvas");
 const hitContext = hitCanvas.getContext("2d");
 
+const color = document.getElementById("color");
+
+const info = document.getElementById("info");
+
 window.onmousemove = move;
 window.onmousedown = down;
 window.onmouseup = up;
@@ -19,6 +23,18 @@ const colorHash = {};
 
 var selection = undefined;
 var mode = "create";
+var selectedEdge = undefined;
+var drawDegree = true;
+
+color.addEventListener("input", (event) => {
+  if (selection) {
+    selection.fillStyle = color.value;
+    draw();
+  } else if (selectedEdge) {
+    selectedEdge.strokeStyle = color.value;
+    draw();
+  }
+});
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -71,17 +87,26 @@ function draw() {
   drawEdges();
 
   drawVertices();
+
+  info.innerHTML =
+    "M = " +
+    nodes.length +
+    ", N = " +
+    edges.length +
+    " K = " +
+    numberComponents();
 }
 
 function findMidPoint(from, to) {
   return {
-    x: (from.x + to.x) / 2,
-    y: (from.y + to.y) / 2,
+    x: (from.x + to.x) * 0.5,
+    y: (from.y + to.y) * 0.5,
   };
 }
 
 function drawMidPoint(e) {
   e.midpoint = findMidPoint(e.from, e.to);
+  //drawArrow(e.from.x, e.from.y, e.to.x, e.to.y, 10, "black");
 
   drawVertex({
     x: e.midpoint.x,
@@ -104,7 +129,7 @@ function drawEdges() {
       drawLoop(edges[i]);
     } else if (countParalell(fromNode, toNode) === 1) {
       context.beginPath();
-      context.strokeStyle = fromNode.strokeStyle;
+      context.strokeStyle = edges[i].strokeStyle;
       context.moveTo(fromNode.x, fromNode.y);
       context.quadraticCurveTo(
         edges[i].midpoint.x,
@@ -128,8 +153,17 @@ function drawEdges() {
       hitContext.stroke();
     } else {
       drawCurvedEdge(edges[i]);
-      drawMidPoint(edges[i]);
+      //drawMidPoint(edges[i]);
+      edges[i].midpoint = findMidPoint(edges[i].from, edges[i].to);
     }
+    drawArrow(
+      edges[i].from.x,
+      edges[i].from.y,
+      edges[i].to.x,
+      edges[i].to.y,
+      10,
+      "black"
+    );
   }
   context.lineWidth = 1;
   hitContext.lineWidth = 1;
@@ -138,7 +172,7 @@ function drawEdges() {
 function drawLoop(edge) {
   let node = edge.from;
   context.beginPath();
-  context.strokeStyle = node.strokeStyle;
+  context.strokeStyle = edge.strokeStyle;
   context.moveTo(node.x, node.y);
   context.arc(node.x - 28, node.y, 20, 0, Math.PI * 2, true);
   context.stroke();
@@ -175,6 +209,7 @@ function drawCurvedEdge(edge) {
     clockwise = true;
   }
 
+  context.strokeStyle = edge.strokeStyle;
   context.beginPath();
   context.ellipse(
     edge.midpoint.x,
@@ -187,7 +222,20 @@ function drawCurvedEdge(edge) {
     clockwise
   );
   context.stroke();
-  //console.log(countParalell(edge.from, edge.to));
+
+  hitContext.strokeStyle = edge.colorKey;
+  hitContext.beginPath();
+  hitContext.ellipse(
+    edge.midpoint.x,
+    edge.midpoint.y,
+    major,
+    minor,
+    angle,
+    0,
+    Math.PI,
+    clockwise
+  );
+  hitContext.stroke();
 }
 
 function drawVertex(v) {
@@ -197,6 +245,10 @@ function drawVertex(v) {
   context.strokeStyle = v.strokeStyle;
   context.fill();
   context.stroke();
+  if (drawDegree && v.edges) {
+    context.fillStyle = "black";
+    context.fillText(v.edges?.length, v.x, v.y);
+  }
 }
 
 function drawVertices() {
@@ -204,6 +256,45 @@ function drawVertices() {
     let node = nodes[i];
     drawVertex(node);
   }
+  getAdjMatrix();
+}
+
+function drawArrow(fromx, fromy, tox, toy, arrowWidth, color) {
+  //variables to be used when creating the arrow
+  var headlen = 20;
+  var angle = Math.atan2(toy - fromy, tox - fromx);
+
+  context.save();
+  context.strokeStyle = color;
+
+  //starting path of the arrow from the start square to the end square
+  //and drawing the stroke
+
+  //starting a new path from the head of the arrow to one of the sides of
+  //the point
+  context.beginPath();
+  context.moveTo(tox, toy);
+  context.lineTo(
+    tox - headlen * Math.cos(angle - Math.PI / 7),
+    toy - headlen * Math.sin(angle - Math.PI / 7)
+  );
+
+  //path from the side point of the arrow, to the other side point
+  context.lineTo(
+    tox - headlen * Math.cos(angle + Math.PI / 7),
+    toy - headlen * Math.sin(angle + Math.PI / 7)
+  );
+
+  //path from the side point back to the tip of the arrow, and then
+  //again to the opposite side point
+  context.lineTo(tox, toy);
+  context.lineTo(
+    tox - headlen * Math.cos(angle - Math.PI / 7),
+    toy - headlen * Math.sin(angle - Math.PI / 7)
+  );
+
+  //draws the paths created above
+  context.stroke();
 }
 
 function countParalell(from, to) {
@@ -216,7 +307,6 @@ function countParalell(from, to) {
       count++;
     }
   }
-  //console.log(count);
   return count;
 }
 
@@ -245,6 +335,28 @@ function move(e) {
   }
 }
 
+function addEdge(to, from) {
+  // TODO extract to addEdge function
+  midpoint = findMidPoint(from, to);
+  newEdge = {
+    id: edges.length === 0 ? 1 : edges[edges.length - 1].id + 1,
+    from: from,
+    to: to,
+    midpoint: { ...midpoint },
+    colorKey: getHitColor(),
+    strokeStyle: "#009999",
+  };
+  // Add hitColor to colorHash
+  colorHash[newEdge.colorKey] = newEdge;
+
+  // Add to master edge list
+  edges.push(newEdge);
+
+  // Add to each vertex edge list
+  from.edges.push(newEdge);
+  to.edges.push(newEdge);
+}
+
 function down(e) {
   let position = getMousePosition(e);
 
@@ -253,36 +365,22 @@ function down(e) {
     return;
   }
   let target = within(position.x, position.y);
+  selectedEdge = clickedEdge(position.x, position.y);
 
   if (mode == "create") {
     // toggle currently selected node to false
     if (selection && selection.selected) {
       selection.selected = false;
     }
+    // if another vertex clicked, create edge
     if (target) {
       if (selection) {
-        // TODO extract to addEdge function
-        midpoint = findMidPoint(selection, target);
-        newEdge = {
-          id: edges.length === 0 ? 1 : edges[edges.length - 1].id + 1,
-          from: selection,
-          to: target,
-          midpoint: { ...midpoint },
-          colorKey: getHitColor(),
-        };
-        // Add hitColor to colorHash
-        colorHash[newEdge.colorKey] = newEdge;
-
-        // Add to master edge list
-        edges.push(newEdge);
-
-        // Add to each vertex edge list
-        selection.edges.push(newEdge);
-        target.edges.push(newEdge);
+        addEdge(target, selection);
       }
       selection = target;
       selection.selected = true;
       draw();
+    } else if (selectedEdge) {
     }
   } else {
   }
@@ -294,8 +392,9 @@ function up(e) {
   if (position.x < 0 || position.y < 0) {
     return;
   }
+
   if (mode == "create") {
-    if (!selection) {
+    if (!selection && !selectedEdge) {
       let node = {
         x: position.x,
         y: position.y,
@@ -330,18 +429,22 @@ function up(e) {
       draw();
     } else {
       // Mode delete, check if clicked edge and delete it
-      const pixel = hitContext.getImageData(position.x, position.y, 1, 1).data;
-      const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
-      const edge = colorHash[color];
-      //console.log(colorHash);
-      //console.log(edge);
+      const edge = clickedEdge(position.x, position.y);
+
       if (edge) {
-        //console.log("clicked edge");
         deleteEdges([edge]);
         draw();
       }
     }
   }
+}
+
+function clickedEdge(x, y) {
+  const pixel = hitContext.getImageData(x, y, 1, 1).data;
+  const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+  const edge = colorHash[color];
+
+  return edge;
 }
 
 function deleteEdges(dyingEdges) {
@@ -373,3 +476,70 @@ function deleteVertices(dyingVertices) {
     nodes.splice(nodes.indexOf(dyingVertices[i]), 1);
   }
 }
+
+function findPath(start, finish, path = []) {
+  if (start === finish) {
+    return path;
+  }
+  for (let i = 0; i < start.edges; i++) {
+    i = 1;
+  }
+}
+
+function numberComponents() {
+  let visited = new Array(nodes.length).fill(false);
+  let count = 0;
+
+  for (let v = 0; v < nodes.length; v++) {
+    if (visited[v] == false) {
+      DFSUtil(v, visited);
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function DFSUtil(v, visited) {
+  visited[v] = true;
+  let count = 0;
+
+  for (let i of getAdj(nodes[v])) {
+    console.log(visited[nodes.indexOf(i)]);
+    if (visited[nodes.indexOf(i)] == false) {
+      console.log("inside");
+      DFSUtil(nodes.indexOf(i), visited);
+    }
+  }
+}
+
+function getAdj(v) {
+  adjs = [];
+
+  for (let i = 0; i < v.edges.length; i++) {
+    if (v.edges[i].from != v) {
+      adjs.push(v.edges[i].from);
+    } else {
+      adjs.push(v.edges[i].to);
+    }
+  }
+
+  return adjs;
+}
+
+function getAdjMatrix() {
+  let matrix = new Array(nodes.length)
+    .fill()
+    .map((_) => Array(edges.length).fill(0));
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = 0; j < nodes.length; j++) {
+      if (edges[i].to === nodes[j] || edges[i].from === nodes[j]) {
+        matrix[j][i] = 1;
+      } else {
+        matrix[j][i] = 0;
+      }
+    }
+  }
+  console.log(matrix);
+}
+
+function save() {}
