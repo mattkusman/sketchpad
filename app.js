@@ -25,6 +25,7 @@ var selection = undefined;
 var mode = "create";
 var selectedEdge = undefined;
 var drawDegree = true;
+var directed = false;
 
 color.addEventListener("input", (event) => {
   if (selection) {
@@ -106,7 +107,6 @@ function findMidPoint(from, to) {
 
 function drawMidPoint(e) {
   e.midpoint = findMidPoint(e.from, e.to);
-  //drawArrow(e.from.x, e.from.y, e.to.x, e.to.y, 10, "black");
 
   drawVertex({
     x: e.midpoint.x,
@@ -156,14 +156,16 @@ function drawEdges() {
       //drawMidPoint(edges[i]);
       edges[i].midpoint = findMidPoint(edges[i].from, edges[i].to);
     }
-    drawArrow(
-      edges[i].from.x,
-      edges[i].from.y,
-      edges[i].to.x,
-      edges[i].to.y,
-      10,
-      "black"
-    );
+    if (directed) {
+      drawArrow(
+        edges[i].from.x,
+        edges[i].from.y,
+        edges[i].to.x,
+        edges[i].to.y,
+        10,
+        "black"
+      );
+    }
   }
   context.lineWidth = 1;
   hitContext.lineWidth = 1;
